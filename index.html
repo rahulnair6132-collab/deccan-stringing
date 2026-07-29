@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F2F2F7">
+<title>Stringing Scan — Deccan</title>
+
+<!-- QR scanning library (CDN) -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+  :root{
+    --bg:#F2F2F7; --card:#FFFFFF; --label:#1C1C1E; --sub:#8E8E93;
+    --blue:#007AFF; --green:#34C759; --amber:#FF9F0A; --red:#FF3B30;
+    --sep:rgba(60,60,67,0.16); --fill:rgba(118,118,128,0.12);
+    --radius:16px; --radius-lg:22px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#000000; --card:#1C1C1E; --label:#FFFFFF; --sub:#8E8E93;
+      --sep:rgba(84,84,88,0.6); --fill:rgba(118,118,128,0.24); }
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--label);
+    font-family:var(--font); -webkit-font-smoothing:antialiased; }
+  body{ padding: max(16px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); max-width:520px; margin:0 auto; }
+
+  .nav{ display:flex; align-items:flex-end; justify-content:space-between; padding:6px 2px 16px; gap:12px; }
+  .nav h1{ font-size:26px; font-weight:700; letter-spacing:-0.4px; margin:0; line-height:1; }
+  .nav .logo{ height:30px; width:auto; display:block; margin-bottom:1px; }
+  @media (prefers-color-scheme: dark){
+    .nav .logo{ filter:brightness(0) invert(1); opacity:0.92; }
+  }
+
+  .card{ background:var(--card); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.04); }
+
+  /* ---- scan viewport ---- */
+  .scanwrap{ position:relative; border-radius:var(--radius); overflow:hidden; background:#000;
+    aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; }
+  #reader{ width:100%; height:100%; }
+  #reader video{ object-fit:cover !important; width:100% !important; height:100% !important; }
+  /* hide library default ui */
+  #reader__dashboard_section_csr button,#reader__dashboard_section_swaplink,#reader__status_span,#reader__header_message{ display:none !important; }
+  #reader__dashboard{ padding:0 !important; }
+  #reader img[alt="Info icon"]{ display:none !important; }
+
+  .brackets{ position:absolute; inset:0; pointer-events:none; }
+  .brackets::before,.brackets::after,
+  .brackets i::before,.brackets i::after{
+    content:""; position:absolute; width:44px; height:44px; border:3px solid rgba(255,255,255,0.95);
+    border-radius:6px; }
+  .brackets::before{ top:16%; left:16%; border-right:0; border-bottom:0; }
+  .brackets::after{ top:16%; right:16%; border-left:0; border-bottom:0; }
+  .brackets i::before{ bottom:16%; left:16%; border-right:0; border-top:0; }
+  .brackets i::after{ bottom:16%; right:16%; border-left:0; border-top:0; }
+  .scanline{ position:absolute; left:16%; right:16%; height:2px; top:16%;
+    background:linear-gradient(90deg,transparent,var(--green),transparent);
+    box-shadow:0 0 12px var(--green); animation:sweep 2.4s ease-in-out infinite; }
+  @keyframes sweep{ 0%{top:18%;opacity:0} 12%{opacity:1} 50%{top:80%;opacity:1} 88%{opacity:1} 100%{top:18%;opacity:0} }
+  @media (prefers-reduced-motion: reduce){ .scanline{ animation:none; top:50%; } }
+
+  .placeholder{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:12px; color:#fff; text-align:center; padding:24px; }
+  .placeholder svg{ width:52px; height:52px; opacity:0.9; }
+  .placeholder p{ margin:0; font-size:15px; color:rgba(255,255,255,0.85); }
+
+  /* ---- status pill ---- */
+  .pill{ display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600;
+    padding:7px 13px; border-radius:100px; background:var(--fill); color:var(--sub); transition:all .25s ease; }
+  .pill .dot{ width:8px; height:8px; border-radius:50%; background:var(--sub); transition:all .25s ease; }
+  .pill.on{ background:rgba(52,199,89,0.15); color:var(--green); }
+  .pill.on .dot{ background:var(--green); box-shadow:0 0 0 3px rgba(52,199,89,0.2); }
+  .pill.wait{ background:rgba(255,159,10,0.15); color:var(--amber); }
+  .pill.wait .dot{ background:var(--amber); animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse{ 50%{opacity:0.35} }
+  .pillrow{ display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+
+  /* ---- fields ---- */
+  .field{ margin-top:6px; }
+  .field + .field{ margin-top:14px; }
+  .field label{ display:block; font-size:13px; font-weight:600; color:var(--sub); margin:0 0 6px 2px; }
+  .val{ font-size:17px; font-weight:600; letter-spacing:-0.2px; word-break:break-all; }
+  .val.empty{ color:var(--sub); font-weight:400; }
+  .row2{ display:flex; gap:12px; }
+  .row2 .field{ flex:1; margin-top:0; }
+  input[type=text]{ width:100%; font-family:var(--font); font-size:17px; color:var(--label);
+    background:var(--fill); border:0; border-radius:12px; padding:13px 14px; outline:none; }
+  input[type=text]::placeholder{ color:var(--sub); }
+
+  /* ---- buttons ---- */
+  .btn{ width:100%; border:0; border-radius:14px; padding:16px; font-family:var(--font);
+    font-size:17px; font-weight:600; cursor:pointer; transition:transform .08s ease, opacity .2s ease; }
+  .btn:active{ transform:scale(0.98); }
+  .btn-primary{ background:var(--blue); color:#fff; }
+  .btn-success{ background:var(--green); color:#fff; }
+  .btn-ghost{ background:var(--fill); color:var(--blue); }
+  .btn:disabled{ opacity:0.4; cursor:default; }
+  .btn + .btn{ margin-top:10px; }
+
+  .hint{ font-size:12.5px; color:var(--sub); text-align:center; margin:12px 4px 0; line-height:1.4; }
+  .maplink{ font-size:13px; color:var(--blue); text-decoration:none; font-weight:600; }
+
+  /* ---- toast ---- */
+  .toast{ position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(120%);
+    background:var(--label); color:var(--bg); padding:14px 20px; border-radius:14px; font-size:15px; font-weight:600;
+    box-shadow:0 8px 30px rgba(0,0,0,0.25); transition:transform .35s cubic-bezier(.2,.9,.3,1.2); z-index:99; max-width:88%; text-align:center; }
+  .toast.show{ transform:translateX(-50%) translateY(0); }
+  .toast.err{ background:var(--red); color:#fff; }
+  .toast.ok{ background:var(--green); color:#fff; }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+  <div class="nav">
+    <h1>Stringing Scan</h1>
+    <img class="logo" id="logo" alt="Deccan — Since 1966">
+  </div>
+
+  <!-- SCAN CARD -->
+  <div class="card">
+    <div class="scanwrap">
+      <div id="reader"></div>
+      <div class="brackets"><i></i></div>
+      <div class="scanline" id="scanline"></div>
+      <div class="placeholder" id="placeholder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/>
+          <rect x="7" y="7" width="10" height="10" rx="1.5"/>
+        </svg>
+        <p>Tap Start, then point at the insulator QR</p>
+      </div>
+    </div>
+    <div class="pillrow">
+      <span class="pill" id="pillId"><span class="dot"></span>Insulator ID</span>
+      <span class="pill" id="pillGps"><span class="dot"></span>GPS location</span>
+    </div>
+  </div>
+
+  <!-- DETAILS CARD -->
+  <div class="card">
+    <div class="field">
+      <label>Insulator ID</label>
+      <div class="val empty" id="outId">Not scanned yet</div>
+    </div>
+    <div class="field">
+      <label>MR No.</label>
+      <div class="val empty" id="outMr">—</div>
+    </div>
+    <div class="row2" style="margin-top:14px">
+      <div class="field">
+        <label>Latitude</label>
+        <div class="val empty" id="outLat">—</div>
+      </div>
+      <div class="field">
+        <label>Longitude</label>
+        <div class="val empty" id="outLng">—</div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:6px">
+      <a class="maplink hidden" id="mapLink" target="_blank" rel="noopener">View on map ↗</a>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>Site name <span style="font-weight:400">(optional — can be added at invoicing)</span></label>
+      <input type="text" id="inSite" placeholder="e.g. 220kV Nalgonda Substation" autocomplete="off">
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <button class="btn btn-primary" id="btnStart">Start camera</button>
+  <button class="btn btn-success hidden" id="btnSave" disabled>Save stringing scan</button>
+  <button class="btn btn-ghost hidden" id="btnRescan">Scan another</button>
+  <p class="hint" id="hint">Camera and location need permission. Works in Safari / Chrome over HTTPS. No app or login required.</p>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG  —  set this to your Power Automate HTTP trigger URL
+   (Flow: "When an HTTP request is received" → copy the POST URL)
+   ============================================================ */
+const CONFIG = {
+  FLOW_URL: "PASTE_YOUR_POWER_AUTOMATE_HTTP_URL_HERE",
+  STAGE: "Stringing",
+  QR_DELIMITER: "\u2502"   // the │ pipe char used in your QR payload
+};
+
+/* ---------- state ---------- */
+let html5Qr = null;
+let scanning = false;
+const state = { id:"", mr:"", lat:null, lng:null };
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+function toast(msg, kind){ const t=$("toast"); t.textContent=msg; t.className="toast show "+(kind||""); setTimeout(()=>t.className="toast",2600); }
+function haptic(){ if(navigator.vibrate) navigator.vibrate(30); }
+
+function setPill(el, on, waiting){
+  el.classList.toggle("on", !!on);
+  el.classList.toggle("wait", !!waiting);
+}
+function refreshSaveBtn(){
+  const ready = state.id && state.lat!=null && state.lng!=null;
+  $("btnSave").disabled = !ready;
+}
+
+/* ---------- parse QR payload ---------- */
+function parseQR(text){
+  const parts = text.split(CONFIG.QR_DELIMITER);
+  if(parts.length >= 3){
+    // payload like  SKU│MRNo│InsulatorID
+    return { id: parts[parts.length-1].trim(), mr: parts[1].trim() };
+  }
+  return { id: text.trim(), mr: "" };
+}
+
+/* ---------- geolocation ---------- */
+function grabLocation(){
+  if(!navigator.geolocation){ toast("Location not supported on this device","err"); return; }
+  setPill($("pillGps"), false, true);
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      state.lat = +pos.coords.latitude.toFixed(6);
+      state.lng = +pos.coords.longitude.toFixed(6);
+      $("outLat").textContent = state.lat; $("outLat").classList.remove("empty");
+      $("outLng").textContent = state.lng; $("outLng").classList.remove("empty");
+      const ml=$("mapLink"); ml.href=`https://www.google.com/maps?q=${state.lat},${state.lng}`; ml.classList.remove("hidden");
+      setPill($("pillGps"), true, false);
+      refreshSaveBtn();
+    },
+    err => {
+      setPill($("pillGps"), false, false);
+      toast(err.code===1 ? "Location permission denied" : "Couldn't get location — try again","err");
+    },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+  );
+}
+
+/* ---------- scan success ---------- */
+function onScan(decoded){
+  if(!scanning) return;
+  haptic();
+  const p = parseQR(decoded);
+  state.id = p.id; state.mr = p.mr;
+  $("outId").textContent = p.id || "—"; $("outId").classList.toggle("empty", !p.id);
+  $("outMr").textContent = p.mr || "—"; $("outMr").classList.toggle("empty", !p.mr);
+  setPill($("pillId"), true, false);
+  stopScan();
+  toast("QR captured — getting location…","ok");
+  grabLocation();
+  $("btnSave").classList.remove("hidden");
+  $("btnRescan").classList.remove("hidden");
+  $("btnStart").classList.add("hidden");
+}
+
+/* ---------- camera control ---------- */
+function startScan(){
+  $("placeholder").classList.add("hidden");
+  html5Qr = new Html5Qrcode("reader", { verbose:false });
+  html5Qr.start(
+    { facingMode:"environment" },
+    { fps:10, qrbox:{width:230,height:230}, aspectRatio:1.0 },
+    onScan,
+    ()=>{}
+  ).then(()=>{ scanning=true; setPill($("pillId"), false, true); })
+   .catch(e=>{
+      $("placeholder").classList.remove("hidden");
+      toast("Camera permission needed","err");
+   });
+}
+function stopScan(){
+  scanning=false;
+  if(html5Qr){ html5Qr.stop().then(()=>html5Qr.clear()).catch(()=>{}); }
+}
+
+/* ---------- save → POST to flow ---------- */
+async function save(){
+  if($("btnSave").disabled) return;
+  const btn=$("btnSave"); btn.disabled=true; btn.textContent="Saving…";
+  const payload = {
+    InsulatorID: state.id,
+    MRNo: state.mr,
+    StageName: CONFIG.STAGE,
+    Latitude: state.lat,
+    Longitude: state.lng,
+    SiteName: $("inSite").value.trim()
+  };
+  try{
+    if(CONFIG.FLOW_URL.startsWith("PASTE_")) throw new Error("Flow URL not configured");
+    const res = await fetch(CONFIG.FLOW_URL, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    haptic();
+    toast("Saved: "+state.id,"ok");
+    setTimeout(resetAll, 900);
+  }catch(err){
+    toast("Save failed — "+err.message,"err");
+    btn.disabled=false; btn.textContent="Save stringing scan";
+  }
+}
+
+/* ---------- reset for next unit ---------- */
+function resetAll(){
+  state.id=""; state.mr=""; state.lat=null; state.lng=null;
+  $("outId").textContent="Not scanned yet"; $("outId").classList.add("empty");
+  $("outMr").textContent="—"; $("outMr").classList.add("empty");
+  $("outLat").textContent="—"; $("outLat").classList.add("empty");
+  $("outLng").textContent="—"; $("outLng").classList.add("empty");
+  $("inSite").value="";
+  $("mapLink").classList.add("hidden");
+  setPill($("pillId"), false, false);
+  setPill($("pillGps"), false, false);
+  $("btnSave").classList.add("hidden"); $("btnSave").disabled=true; $("btnSave").textContent="Save stringing scan";
+  $("btnRescan").classList.add("hidden");
+  $("btnStart").classList.remove("hidden");
+  $("placeholder").classList.remove("hidden");
+}
+
+/* ---------- embedded logo ---------- */
+const LOGO_B64 = "iVBORw0KGgoAAAANSUhEUgAAAfQAAAC4CAMAAAAi5e4bAAAAD1BMVEUGOI4KUZ4LUZ5tb3IMUp8Ipa4JAAAABHRSTlMANrL7b+kYFgAACkhJREFUeNrtXduWozAMQyL//8370Gm3QC527HQ6B2nf2MENVnyJE8y2CYIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIg3A2AdHA7znfp4HbYZej341yGfjtQhn5DzmXo90viZOg35FyGfkPOZei3S9x3Sgu341yGfr/EXYZ+Q86Vxd0viZOh35BzGfr9kjhlcTfkXIZ+Q86/0dABgAcA3kMeGTL+fJpe3oBX4v4w9Pf/KyThkuaAQeloyzYM7CmjI8RDfPtJGLi5cy+mfslCE984R4NC9n4Lk5yXAFlWHWTIsMzt8cybuZeZpOMs5ZG473tndG2bmCWdkyZul2EU4leaXwRnHB6nvON4/AfO0R0dk707w5R3dWCWwTjnYy5mfh8lk3SehPxwzsGzNYw9PaSDH5XBYEC3cDHlJlaF9HfO9zGD8KvDrShkyGDG5HPM7BDp+GxIP3BOg8axOo8D4zKcvgdh5z4mgzM3rwnp74u1ynLNpuXUkM6EiYOMyecUyRXBYTrn7GmWB85h0heXencmTByWfNIZFIIZ0peE9EPibjT06wCRRzoSvAWY4nHc8wgRAVwf0rcq57AaybJVOhOEICnMuIWGSC/rvTveBOxeQ788XlpIZ4IQlAWko4RJn7kbC0I6DnZuN/SzkrK8OxOEsKwgnWEpU3kg8r07jna+O8xkyYKNCTOHZQXpCfVgztydv2A7LtY8hn4aYY53BxPcBcsK0pEgZWoFkVqDBX82zd4458/1wsIM0jn857XRxx44ycO2GZJlzNcbg9uQXBzSX1KPzt2xPYWRTjgTcHob57iM78GbmfOrjA0/267+vJvOhTrKhKnnLtiOR2X21glYmEjHfDXbxhe7+2hxGRv8zr1qEsGsAEtDeoXz3VkFx+h5sji3n2tBR0ZAV3XOqyNGjHQuXaVXOPdudzHVuzNOeWeoMetg/enoe+ikikPYu3No6L1DNIO/YNiYnHRhDeVbK3jD9dC2VcW45MBMzuGeookhHZFN7oFao1pCa2BwxbSsmldwBr8n7r2j7kNG4iGd6zjHCs65uUmfKlykh/Qj5/CvpZAW0lHimSDWcN6J3PD8Xlahk4mc7wEbCnv3FL4+yPlT6grSRzUvfojzEemMqpsJfGFJPO9bs2fU5urwypB+5JwRS4yG9Ay+FnG+daU6SLfvSGFdSN8dhj4iPapvJvDFTwf04YwYq3A45mTvzt2cxQ1Jn9hWxVg64ha52Lm7qjM1/obeKbcGC5ehD5Lrib3MdL4y6sBuzjfHlkuNv+GaJfek1O4y9AHpwb3rLzb0kSU7Furm4v3bo+cu2HafofezpOghxAwjxZKIPjRk+0K9npIN/HtmSD/b+T755vk86Z/x7lzs3D2kN/jrqydzHu8X0v9jIjXmCu/+BYaOudJ4fa41hkdvgpzG+Xi53h3bCu/+Des1S5ZmHXuLP2/cnHVe9HPe9ULRBdu35u5sHMU4IEA6h7XjvAUbJjjPzuPwB3L36TPd1cnWTMn4CdJ7nO/bhKFHV+kZpC8I6QHOXeeYO/aUF9JnOO8vLL5gwbYgpDOVdHiLHCt22Ko2P7dg274gpJf0kB7hvDLbOvy1J+yKc7BmzvuF9yXenb8c0iPO3fgi7vgAyoqysrkox5Xe/TtJL8mkzxw1W3EO1sx5+g5bOunpW+mMkV4cIb2dha4n3T/r+0Pu4evPT6Akk95PyRqjX7CXYOZ8cKw4mjjz+0gPc355/In92YJ80q2Hn5sayCqiriO9/JZzv5AzWHA35my+dze+5TA88R42soVnn3+NcwPpnEkbmWjoM54urRaWcfgZmTqKO/fLL4+MNqEBrjeiz8z6vFdbMghDyTP1DM69rybh46RjgnPm7YumEJaopOYjN/4ZSB+nZEZTT4voPT44/vW4mWbErzwtefNKSzoxbl3AD4R0hHK492masL3FhEdkmpq8LsOSkozzcHzU0KfaJgybfeQEUX5WRodzbiHS5xby2aQbOIfJy6wrpz1OqXTvAy1KG8lAxLmb8lDLtjiWe3eOODf3lFp36mXwnCANHqc/dc4y5paP44FbqizrST9wfvpK2am32kAFDcsYwt7rj9cGYK8PL8GotHYXMVORBMGAMLv3mnsm5P1AnHtZmtGb8fTQw79+bdUcJ+RnZDCY7ttq6Fwc0o92vpQu26TNaA2K+OzjlK6Hdxl3SNd6d0bsnFuCps+KRIaQ8MSZrAcPSTdunHCpd38/7JxfU56qMiBBCKITZ9K+MEE67HJySOcb59EvpaR9iI0JQoIyZjtTjRyEeVt8ZUh/8+3hr+NknTFI+fgGQoY+3Y1stFA3t4+d+ryLowI759szqGqNH/GJE/rcz/xe3wTpnNneQ9DQ53z71DLDrMqM72kFlp8BTQ/GZ5e6zLvjtbHGOFFp3j1pPF7WGXfu28y50ZkTO4wZ+pSdI8Ow+g+d8ZlNzD1U6CBHX7jjHDMWkY4pzpM/osypin++jJJzjqNPuoc/rgnpM76d4Q6I5vEnfDnbYezMOXdDL+mYefyQoTuV2/scQkknPeeTSN7Gu8F+4d3bXW8bY4l3d3FO9j+AkRzSDxueo5GNWh3CISN6MrNLuu/w+grvjv21OzmERdwkDJKbxNP8JZY28ScZAQ2M7/fJDdHRkrn9JWQ8eab2BEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEG4N8DLiwsk+fbS+Kv72KUN2eNk/PVeHiVcfvLyMZHqn+Pye/VrghesvL1ReYGYz+vo34vhOySPD6PWGq3jOhlPf1m7Jsxzfn5l+Nwp4Hl9q/FbzKSj1/uw/u1Xdq8Jft/+UGFFtxXSWSo9QclWX4Fu04NzbyG2276hd02YNHRsGy/NFc+qxpl0/r/cjAxt0rfjLajONGzbewB/zk2K8zjp/Yt4OdQjodVXX2Hs6HmaYvy53IowzWt/yKf+Jir8nrPhax7HUsopj2O709XgFcViIJ2Ndnn8bnWacqdfQLUfLDsWxfL4Ih22g2nX33E3pFqo9AXleWlQSingcT4+r5XKHP018A+SvrW6sx6jK0opxPszNvw4jd09LhGBh5sGaRxFeoh0XK9XQvrGKumoum4D6a327qioqLZChEjPaQjbYOVFehlmWgcCrCG9atY/eTpG1/4O6fiyzANd0vlStYF0S4J9VRVAguemQ+c4X7v2lfr8AwuJayZeGqRfIyxby/5ROQgDr/+cXybSBe8ynZcoXkveX0Fgu1RPNnCw7B+RjuudPwRDpK+qwZLXfsnnetnzb69FWF5ywMpHgd62yJ63vU+8nxZUl0IwK6kjVXlP221p1UVemyyXLLC23WJvY1vpyc3B0s+wHBSspl5pv81rqL2k5JU6DAa9CdlbfnOwkmz8peC3dZ4bz6IxBa7hGvV7naQ/A8flsMT1Kthtkiu4NgJ+5+aBlNpV9R0UBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQBEEQboN/sS84fbCRf9MAAAAASUVORK5CYII=";
+$("logo").src = "data:image/png;base64," + LOGO_B64;
+
+/* ---------- wire up ---------- */
+$("btnStart").addEventListener("click", startScan);
+$("btnRescan").addEventListener("click", ()=>{ resetAll(); startScan(); });
+$("btnSave").addEventListener("click", save);
+</script>
+</body>
+</html>
